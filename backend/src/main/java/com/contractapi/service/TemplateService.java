@@ -1,31 +1,50 @@
 package com.contractapi.service;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.contractapi.constants.ErrorCode;
 import com.contractapi.entity.ContractTemplate;
+import com.contractapi.exception.ApiException;
+import com.contractapi.mapper.ContractTemplateMapper;
+import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TemplateService {
-  private final List<ContractTemplate> templates = new ArrayList<>();
+  private final ContractTemplateMapper templateMapper;
 
-  public TemplateService() {
-    ContractTemplate template = new ContractTemplate();
-    template.setId(1L);
-    template.setType("LEASE");
-    template.setTitle("租赁合同");
-    template.setContent("甲方：${partyA}\\n乙方：${partyB}\\n租金：${amount}\\n日期：${date}");
-    template.setVariables("[\"partyA\",\"partyB\",\"amount\",\"date\"]");
-    templates.add(template);
+  public TemplateService(ContractTemplateMapper templateMapper) {
+    this.templateMapper = templateMapper;
   }
 
-  public List<ContractTemplate> list() { return templates; }
+  /** 合同生成只允许使用处于可用状态的模板。 */
+  public List<ContractTemplate> list() {
+    return templateMapper.selectList(new QueryWrapper<ContractTemplate>()
+        .eq("enabled", true)
+        .orderByAsc("id"));
+  }
+
+  @Transactional
   public ContractTemplate create(ContractTemplate template) {
-    template.setId(System.currentTimeMillis());
-    templates.add(template);
+    if (template.getEnabled() == null) {
+      template.setEnabled(true);
+    }
+    templateMapper.insert(template);
     return template;
   }
-  public ContractTemplate find(Long id) {
-    return templates.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(templates.get(0));
+
+  public ContractTemplate findAvailable(Long id) {
+    if (id == null) {
+      throw new ApiException(ErrorCode.VALIDATION_FAILED, "缺少模板 ID");
+    }
+    ContractTemplate template = templateMapper.selectById(id);
+    if (template == null) {
+      throw new ApiException(ErrorCode.NOT_FOUND, "模板不存在", HttpStatus.NOT_FOUND);
+    }
+    if (!Boolean.TRUE.equals(template.getEnabled())) {
+      throw new ApiException(ErrorCode.TEMPLATE_UNAVAILABLE, "模板已停用，不能用于生成合同");
+    }
+    return template;
   }
 }
