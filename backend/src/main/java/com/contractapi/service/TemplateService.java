@@ -1,31 +1,41 @@
 package com.contractapi.service;
 
-import java.util.ArrayList;
 import java.util.List;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.contractapi.constants.ErrorCode;
 import com.contractapi.entity.ContractTemplate;
+import com.contractapi.exception.ApiException;
+import com.contractapi.mapper.ContractTemplateMapper;
 import org.springframework.stereotype.Service;
 
 @Service
 public class TemplateService {
-  private final List<ContractTemplate> templates = new ArrayList<>();
+  private final ContractTemplateMapper mapper;
 
-  public TemplateService() {
-    ContractTemplate template = new ContractTemplate();
-    template.setId(1L);
-    template.setType("LEASE");
-    template.setTitle("租赁合同");
-    template.setContent("甲方：${partyA}\\n乙方：${partyB}\\n租金：${amount}\\n日期：${date}");
-    template.setVariables("[\"partyA\",\"partyB\",\"amount\",\"date\"]");
-    templates.add(template);
+  public TemplateService(ContractTemplateMapper mapper) {
+    this.mapper = mapper;
   }
 
-  public List<ContractTemplate> list() { return templates; }
+  public List<ContractTemplate> list() {
+    return mapper.selectList(new QueryWrapper<ContractTemplate>().orderByAsc("id"));
+  }
+
   public ContractTemplate create(ContractTemplate template) {
-    template.setId(System.currentTimeMillis());
-    templates.add(template);
+    if (template.getType() == null || template.getType().isBlank()
+        || template.getTitle() == null || template.getTitle().isBlank()
+        || template.getContent() == null || template.getContent().isBlank()) {
+      throw new ApiException(ErrorCode.VALIDATION_FAILED, "模板类型、标题与内容不能为空");
+    }
+    mapper.insert(template);
     return template;
   }
+
+  /** 可用模板必须存在，否则不允许生成合同 */
   public ContractTemplate find(Long id) {
-    return templates.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(templates.get(0));
+    ContractTemplate template = id == null ? null : mapper.selectById(id);
+    if (template == null) {
+      throw new ApiException(ErrorCode.TEMPLATE_NOT_FOUND, "模板不存在或已下架：" + id);
+    }
+    return template;
   }
 }
